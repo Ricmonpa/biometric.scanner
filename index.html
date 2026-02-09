@@ -344,10 +344,16 @@
       }
     }
 
+    // Throttle para logs temporales (no saturar consola)
+    let drawFaceMeshLogTick = 0;
+    const DRAW_MESH_LOG_EVERY = 60;
+
     function drawFaceMeshCyan(ctx, results, width, height) {
       if (!results || results.length === 0) return;
       const w = width || ctx.canvas.width;
       const h = height || ctx.canvas.height;
+      const radiusCyan = 3;
+      const fillStyleCyan = 'rgba(0, 255, 255, 0.95)';
       results.forEach((detection) => {
         const positions = detection.landmarks.positions;
         const box = detection.detection?.box;
@@ -358,6 +364,7 @@
         const first = positions[0];
         const normalized = first && first.x <= 1 && first.y <= 1;
         const likelyBoxRelative = first && box && first.x >= 0 && first.x <= boxW && first.y >= 0 && first.y <= boxH;
+        const firstThreeCoords = [];
         for (let i = 0; i < positions.length; i++) {
           let x = positions[i].x;
           let y = positions[i].y;
@@ -368,16 +375,35 @@
             x += boxX;
             y += boxY;
           }
+          if (i < 3) firstThreeCoords.push({ x, y });
+          if (i < 3 && drawFaceMeshLogTick++ % DRAW_MESH_LOG_EVERY === 0) {
+            console.log(`[drawFaceMeshCyan] punto ${i} (x,y)=(${x.toFixed(1)}, ${y.toFixed(1)}) | fillStyle=${fillStyleCyan} radio=${radiusCyan}`);
+          }
           ctx.shadowColor = '#0ff';
           ctx.shadowBlur = 6;
           ctx.beginPath();
-          ctx.arc(x, y, 3, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(0, 255, 255, 0.95)';
+          ctx.arc(x, y, radiusCyan, 0, Math.PI * 2);
+          ctx.fillStyle = fillStyleCyan;
           ctx.fill();
           ctx.strokeStyle = '#0ff';
           ctx.lineWidth = 1;
           ctx.stroke();
           ctx.shadowBlur = 0;
+        }
+        if (firstThreeCoords.length >= 3) {
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = 'red';
+          ctx.beginPath();
+          ctx.arc(firstThreeCoords[0].x, firstThreeCoords[0].y, 20, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = 'yellow';
+          ctx.beginPath();
+          ctx.arc(firstThreeCoords[1].x, firstThreeCoords[1].y, 20, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = 'magenta';
+          ctx.beginPath();
+          ctx.arc(firstThreeCoords[2].x, firstThreeCoords[2].y, 20, 0, Math.PI * 2);
+          ctx.fill();
         }
       });
     }
