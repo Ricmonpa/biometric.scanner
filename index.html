@@ -331,8 +331,12 @@
     // Opciones del detector relajadas para mejor detección
     const faceDetectorOptions = new faceapi.TinyFaceDetectorOptions({
       inputSize: 416,
-      scoreThreshold: 0.3
+      scoreThreshold: 0.2
     });
+
+    // Canvas auxiliar: en muchos navegadores face-api NO lee bien desde <video> con MediaStream.
+    // Copiar el frame a un canvas y detectar sobre él suele resolver "caras: 0" siempre.
+    let offscreenCanvas = null;
 
     async function detectFaceMesh() {
       if (!faceMeshReady || video.readyState < 2) {
@@ -344,10 +348,20 @@
         requestAnimationFrame(detectFaceMesh);
         return;
       }
-      faceMeshCanvas.width = video.videoWidth;
-      faceMeshCanvas.height = video.videoHeight;
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      faceMeshCanvas.width = w;
+      faceMeshCanvas.height = h;
 
-      const results = await faceapi.detectAllFaces(video, faceDetectorOptions).withFaceLandmarks();
+      if (!offscreenCanvas || offscreenCanvas.width !== w || offscreenCanvas.height !== h) {
+        offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = w;
+        offscreenCanvas.height = h;
+      }
+      const offCtx = offscreenCanvas.getContext('2d');
+      offCtx.drawImage(video, 0, 0, w, h);
+
+      const results = await faceapi.detectAllFaces(offscreenCanvas, faceDetectorOptions).withFaceLandmarks();
 
       // LOGS DE DIAGNÓSTICO
       console.log('🔍 Detección:', {
