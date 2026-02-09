@@ -90,7 +90,7 @@
     .bl { bottom: 20px; left: 20px; border-width: 0 0 3px 3px; }
     .br { bottom: 20px; right: 20px; border-width: 0 3px 3px 0; }
 
-    /* Canvas para malla facial en tiempo real (capa propia para que se vea en Chrome/Android) */
+    /* Canvas: muestra video + malla (mismo look que el video para iPhone/Chrome/Android) */
     #faceMeshCanvas {
       position: absolute;
       top: 0;
@@ -99,9 +99,10 @@
       height: 100%;
       z-index: 15;
       pointer-events: none;
-      transform: scaleX(-1) translateZ(0); /* Espejo + capa GPU */
+      transform: scaleX(-1) translateZ(0);
       backface-visibility: hidden;
       object-fit: cover;
+      filter: contrast(1.2) saturate(0) sepia(100%) hue-rotate(130deg) brightness(0.8); /* Igual que #videoElement */
     }
 
     /* Contenedor SVG estático (fallback / oculto cuando hay malla real) */
@@ -375,10 +376,8 @@
       scoreThreshold: 0.2
     });
 
-    // Canvas auxiliar: en muchos navegadores face-api NO lee bien desde <video> con MediaStream.
+    // Canvas auxiliar: video + malla se dibujan aquí y se copia al visible (Chrome/Android pinta bien solo con frame opaco).
     let offscreenCanvas = null;
-    // Canvas solo para malla: dibujamos puntos aquí y luego drawImage al visible (Chrome/Android lo pinta mejor).
-    let meshOnlyCanvas = null;
 
     async function detectFaceMesh() {
       if (!faceMeshReady || video.readyState < 2) {
@@ -400,47 +399,28 @@
         offscreenCanvas.width = w;
         offscreenCanvas.height = h;
       }
-      if (!meshOnlyCanvas || meshOnlyCanvas.width !== w || meshOnlyCanvas.height !== h) {
-        meshOnlyCanvas = document.createElement('canvas');
-        meshOnlyCanvas.width = w;
-        meshOnlyCanvas.height = h;
-      }
       const offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
       offCtx.drawImage(video, 0, 0, w, h);
 
       const results = await faceapi.detectAllFaces(offscreenCanvas, faceDetectorOptions).withFaceLandmarks();
 
-      // LOGS DE DIAGNÓSTICO
       console.log('🔍 Detección:', {
         carasDetectadas: results.length,
         videoListo: video.readyState,
-        dimensiones: `${video.videoWidth}x${video.videoHeight}`,
+        dimensiones: `${w}x${h}`,
         timestamp: Date.now()
       });
       if (results.length === 0) {
         console.warn('❌ No se detectaron caras en este frame');
       }
 
-      // Dibujar malla en canvas auxiliar (Chrome/Android muestra mejor drawImage que dibujo directo)
-      const meshCtx = meshOnlyCanvas.getContext('2d', { willReadFrequently: false });
-      meshCtx.clearRect(0, 0, w, h);
+      // Puntos cyan encima del frame en el MISMO canvas (video + malla = frame opaco; Chrome/Android lo pinta siempre)
       if (results.length > 0) {
-        drawFaceMeshCyan(meshCtx, results, w, h);
+        drawFaceMeshCyan(offCtx, results, w, h);
       }
 
-      // Visible: solo clear + drawImage del canvas de malla (evita bugs de composición en Blink)
-      ctx.clearRect(0, 0, w, h);
-      ctx.drawImage(meshOnlyCanvas, 0, 0, w, h);
-
-      // Debug (opcional, encima)
-      ctx.fillStyle = 'lime';
-      ctx.fillRect(10, 10, 20, 20);
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 18px monospace';
-      ctx.strokeStyle = 'black';
-      ctx.lineWidth = 3;
-      ctx.strokeText(`Caras: ${results.length}`, 10, 50);
-      ctx.fillText(`Caras: ${results.length}`, 10, 50);
+      // Visible: copiar frame completo (video + puntos). Sin transparencia = sin bugs de composición en Blink.
+      ctx.drawImage(offscreenCanvas, 0, 0, w, h);
 
       requestAnimationFrame(detectFaceMesh);
     }
@@ -453,6 +433,7 @@
         detectionStarted = true;
         await initFaceMesh();
         await waitForVideoReady(video);
+        video.style.visibility = 'hidden'; // Solo canvas (video+malla) visible; evita doble capa en Chrome/Android
         console.log('🎬 Iniciando loop de detección...');
         detectFaceMesh();
       };
