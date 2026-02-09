@@ -312,6 +312,28 @@
       });
     }
 
+    // Función helper para esperar video listo (debug)
+    async function waitForVideoReady(videoEl) {
+      return new Promise((resolve) => {
+        const check = () => {
+          if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+            console.log('✅ Video listo:', videoEl.videoWidth, 'x', videoEl.videoHeight);
+            resolve();
+          } else {
+            console.log('⏳ Esperando video...', videoEl.readyState);
+            setTimeout(check, 100);
+          }
+        };
+        check();
+      });
+    }
+
+    // Opciones del detector relajadas para mejor detección
+    const faceDetectorOptions = new faceapi.TinyFaceDetectorOptions({
+      inputSize: 416,
+      scoreThreshold: 0.3
+    });
+
     async function detectFaceMesh() {
       if (!faceMeshReady || video.readyState < 2) {
         requestAnimationFrame(detectFaceMesh);
@@ -324,24 +346,61 @@
       }
       faceMeshCanvas.width = video.videoWidth;
       faceMeshCanvas.height = video.videoHeight;
-      const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
-      const results = await faceapi.detectAllFaces(video, options).withFaceLandmarks();
+
+      const results = await faceapi.detectAllFaces(video, faceDetectorOptions).withFaceLandmarks();
+
+      // LOGS DE DIAGNÓSTICO
+      console.log('🔍 Detección:', {
+        carasDetectadas: results.length,
+        videoListo: video.readyState,
+        dimensiones: `${video.videoWidth}x${video.videoHeight}`,
+        timestamp: Date.now()
+      });
+      if (results.length === 0) {
+        console.warn('❌ No se detectaron caras en este frame');
+      }
+
       ctx.clearRect(0, 0, faceMeshCanvas.width, faceMeshCanvas.height);
+
+      // === DEBUG VISUAL (dibuja SIEMPRE) ===
+      ctx.fillStyle = 'lime';
+      ctx.fillRect(10, 10, 20, 20);
+
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 18px monospace';
+      ctx.strokeStyle = 'black';
+      ctx.lineWidth = 3;
+      ctx.strokeText(`Caras: ${results.length}`, 10, 50);
+      ctx.fillText(`Caras: ${results.length}`, 10, 50);
+
+      ctx.strokeText(`Video: ${video.videoWidth}x${video.videoHeight}`, 10, 75);
+      ctx.fillText(`Video: ${video.videoWidth}x${video.videoHeight}`, 10, 75);
+
+      ctx.strokeText(`Frame: ${Date.now() % 10000}`, 10, 100);
+      ctx.fillText(`Frame: ${Date.now() % 10000}`, 10, 100);
+      // === FIN DEBUG VISUAL ===
+
       if (results.length > 0) {
         drawFaceMeshCyan(ctx, results);
       }
+
       requestAnimationFrame(detectFaceMesh);
     }
 
     (async function init() {
       await startCamera();
-      video.addEventListener('loadedmetadata', async () => {
+      let detectionStarted = false;
+      const startDetection = async () => {
+        if (detectionStarted) return;
+        detectionStarted = true;
         await initFaceMesh();
+        await waitForVideoReady(video);
+        console.log('🎬 Iniciando loop de detección...');
         detectFaceMesh();
-      });
+      };
+      video.addEventListener('loadedmetadata', startDetection);
       if (video.readyState >= 2) {
-        await initFaceMesh();
-        detectFaceMesh();
+        await startDetection();
       }
     })();
 
