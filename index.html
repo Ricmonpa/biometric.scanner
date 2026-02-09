@@ -204,9 +204,28 @@
       transition: width 2s ease-out;
       box-shadow: 0 0 15px red;
     }
+    /* Debug overlay: siempre visible en Chrome/Android para diagnosticar malla */
+    #debugOverlay {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      z-index: 99999;
+      background: rgba(0,0,0,0.85);
+      color: #0f0;
+      font-family: monospace;
+      font-size: 11px;
+      padding: 8px 10px;
+      border: 1px solid #0f0;
+      pointer-events: none;
+      max-width: 280px;
+      line-height: 1.35;
+    }
+    #debugOverlay .warn { color: #fa0; }
+    #debugOverlay .err { color: #f44; }
   </style>
 </head>
 <body>
+  <div id="debugOverlay" aria-live="polite">DEBUG: iniciando…</div>
   <video id="videoElement" autoplay playsinline muted></video>
 
   <canvas id="faceMeshCanvas" aria-hidden="true"></canvas>
@@ -331,14 +350,23 @@
       const h = height || ctx.canvas.height;
       results.forEach((detection) => {
         const positions = detection.landmarks.positions;
-        // Algunos backends (Chrome/CPU) pueden devolver coords normalizadas 0..1
-        const normalized = positions.length > 0 && positions[0].x <= 1 && positions[0].y <= 1;
+        const box = detection.detection?.box;
+        const boxX = (box && typeof box.x === 'number') ? box.x : 0;
+        const boxY = (box && typeof box.y === 'number') ? box.y : 0;
+        const boxW = (box && typeof box.width === 'number') ? box.width : w;
+        const boxH = (box && typeof box.height === 'number') ? box.height : h;
+        const first = positions[0];
+        const normalized = first && first.x <= 1 && first.y <= 1;
+        const likelyBoxRelative = first && box && first.x >= 0 && first.x <= boxW && first.y >= 0 && first.y <= boxH;
         for (let i = 0; i < positions.length; i++) {
           let x = positions[i].x;
           let y = positions[i].y;
           if (normalized) {
             x *= w;
             y *= h;
+          } else if (likelyBoxRelative) {
+            x += boxX;
+            y += boxY;
           }
           ctx.shadowColor = '#0ff';
           ctx.shadowBlur = 6;
@@ -376,8 +404,10 @@
       scoreThreshold: 0.2
     });
 
-    // Canvas auxiliar: video + malla se dibujan aquí y se copia al visible (Chrome/Android pinta bien solo con frame opaco).
+    // Canvas auxiliar: video + malla se dibujan aquí y se copia al visible.
     let offscreenCanvas = null;
+    let debugThrottle = 0;
+    const debugEl = () => document.getElementById('debugOverlay');
 
     async function detectFaceMesh() {
       if (!faceMeshReady || video.readyState < 2) {
@@ -404,22 +434,31 @@
 
       const results = await faceapi.detectAllFaces(offscreenCanvas, faceDetectorOptions).withFaceLandmarks();
 
-      console.log('🔍 Detección:', {
-        carasDetectadas: results.length,
-        videoListo: video.readyState,
-        dimensiones: `${w}x${h}`,
-        timestamp: Date.now()
-      });
-      if (results.length === 0) {
-        console.warn('❌ No se detectaron caras en este frame');
-      }
-
-      // Puntos cyan encima del frame en el MISMO canvas (video + malla = frame opaco; Chrome/Android lo pinta siempre)
       if (results.length > 0) {
+        // Prueba de tubería: cuadrado rojo en el centro. Si lo ves, el canvas y drawImage funcionan.
+        offCtx.fillStyle = 'rgba(255, 0, 0, 0.85)';
+        offCtx.fillRect(Math.floor(w / 2) - 40, Math.floor(h / 2) - 40, 80, 80);
         drawFaceMeshCyan(offCtx, results, w, h);
+        if (debugThrottle++ % 30 === 0 && debugEl()) {
+          const d = results[0];
+          const pos = d.landmarks.positions;
+          const first = pos[0];
+          const box = d.detection?.box;
+          const boxStr = box ? `box: ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}` : 'box: n/a';
+          debugEl().innerHTML =
+            `CANVAS: ${w}×${h}<br>` +
+            `CARAS: ${results.length} | PTS: ${pos.length}<br>` +
+            `first: (${first ? Math.round(first.x) : '?'}, ${first ? Math.round(first.y) : '?'})<br>` +
+            boxStr + '<br>' +
+            (first && first.x <= 1 ? '<span class="warn">coords normalizadas?</span>' : '') +
+            (first && box && first.x >= 0 && first.x <= box.width && first.y >= 0 && first.y <= box.height ? '<br><span class="warn">usando offset box</span>' : '');
+        }
+      } else {
+        if (debugThrottle++ % 30 === 0 && debugEl()) {
+          debugEl().innerHTML = `CANVAS: ${w}×${h}<br>CARAS: 0<br><span class="err">Sin cara detectada</span>`;
+        }
       }
 
-      // Visible: copiar frame completo (video + puntos). Sin transparencia = sin bugs de composición en Blink.
       ctx.drawImage(offscreenCanvas, 0, 0, w, h);
 
       requestAnimationFrame(detectFaceMesh);
