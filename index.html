@@ -324,20 +324,28 @@
       }
     }
 
-    function drawFaceMeshCyan(ctx, results) {
+    function drawFaceMeshCyan(ctx, results, width, height) {
       if (!results || results.length === 0) return;
+      const w = width || ctx.canvas.width;
+      const h = height || ctx.canvas.height;
       results.forEach((detection) => {
         const positions = detection.landmarks.positions;
+        // Algunos backends (Chrome/CPU) pueden devolver coords normalizadas 0..1
+        const normalized = positions.length > 0 && positions[0].x <= 1 && positions[0].y <= 1;
         for (let i = 0; i < positions.length; i++) {
-          const x = positions[i].x;
-          const y = positions[i].y;
+          let x = positions[i].x;
+          let y = positions[i].y;
+          if (normalized) {
+            x *= w;
+            y *= h;
+          }
           ctx.shadowColor = '#0ff';
           ctx.shadowBlur = 6;
           ctx.beginPath();
-          ctx.arc(x, y, 2, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(0, 255, 255, 0.9)';
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(0, 255, 255, 0.95)';
           ctx.fill();
-          ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
+          ctx.strokeStyle = '#0ff';
           ctx.lineWidth = 1;
           ctx.stroke();
           ctx.shadowBlur = 0;
@@ -368,8 +376,9 @@
     });
 
     // Canvas auxiliar: en muchos navegadores face-api NO lee bien desde <video> con MediaStream.
-    // Copiar el frame a un canvas y detectar sobre él suele resolver "caras: 0" siempre.
     let offscreenCanvas = null;
+    // Canvas solo para malla: dibujamos puntos aquí y luego drawImage al visible (Chrome/Android lo pinta mejor).
+    let meshOnlyCanvas = null;
 
     async function detectFaceMesh() {
       if (!faceMeshReady || video.readyState < 2) {
@@ -391,6 +400,11 @@
         offscreenCanvas.width = w;
         offscreenCanvas.height = h;
       }
+      if (!meshOnlyCanvas || meshOnlyCanvas.width !== w || meshOnlyCanvas.height !== h) {
+        meshOnlyCanvas = document.createElement('canvas');
+        meshOnlyCanvas.width = w;
+        meshOnlyCanvas.height = h;
+      }
       const offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
       offCtx.drawImage(video, 0, 0, w, h);
 
@@ -407,29 +421,26 @@
         console.warn('❌ No se detectaron caras en este frame');
       }
 
-      ctx.clearRect(0, 0, faceMeshCanvas.width, faceMeshCanvas.height);
+      // Dibujar malla en canvas auxiliar (Chrome/Android muestra mejor drawImage que dibujo directo)
+      const meshCtx = meshOnlyCanvas.getContext('2d', { willReadFrequently: false });
+      meshCtx.clearRect(0, 0, w, h);
+      if (results.length > 0) {
+        drawFaceMeshCyan(meshCtx, results, w, h);
+      }
 
-      // === DEBUG VISUAL (dibuja SIEMPRE) ===
+      // Visible: solo clear + drawImage del canvas de malla (evita bugs de composición en Blink)
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(meshOnlyCanvas, 0, 0, w, h);
+
+      // Debug (opcional, encima)
       ctx.fillStyle = 'lime';
       ctx.fillRect(10, 10, 20, 20);
-
       ctx.fillStyle = 'white';
       ctx.font = 'bold 18px monospace';
       ctx.strokeStyle = 'black';
       ctx.lineWidth = 3;
       ctx.strokeText(`Caras: ${results.length}`, 10, 50);
       ctx.fillText(`Caras: ${results.length}`, 10, 50);
-
-      ctx.strokeText(`Video: ${video.videoWidth}x${video.videoHeight}`, 10, 75);
-      ctx.fillText(`Video: ${video.videoWidth}x${video.videoHeight}`, 10, 75);
-
-      ctx.strokeText(`Frame: ${Date.now() % 10000}`, 10, 100);
-      ctx.fillText(`Frame: ${Date.now() % 10000}`, 10, 100);
-      // === FIN DEBUG VISUAL ===
-
-      if (results.length > 0) {
-        drawFaceMeshCyan(ctx, results);
-      }
 
       requestAnimationFrame(detectFaceMesh);
     }
