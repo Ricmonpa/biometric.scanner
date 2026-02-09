@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Biometric Analysis System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background-color: #000;
+      color: #0ff;
+      font-family: 'Share Tech Mono', monospace;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Efecto de Video de Fondo */
+    #videoElement {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+      transform: scaleX(-1); /* Efecto espejo */
+      filter: contrast(1.2) saturate(0) sepia(100%) hue-rotate(130deg) brightness(0.8); /* Look azulado sci-fi */
+    }
+
+    /* Capas de interfaz */
+    .overlay-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none; /* Dejar pasar clics */
+    }
+
+    /* Animación de Escaneo (Barra Verde) */
+    .scan-line {
+      width: 100%;
+      height: 4px;
+      background: rgba(0, 255, 255, 0.8);
+      box-shadow: 0 0 15px rgba(0, 255, 255, 1);
+      position: absolute;
+      top: 0;
+      animation: scanMove 3s infinite linear;
+      display: none; /* Se activa con JS */
+    }
+
+    @keyframes scanMove {
+      0% { top: 0%; opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { top: 100%; opacity: 0; }
+    }
+
+    /* Brackets de las esquinas */
+    .corner {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border-color: rgba(255, 255, 0, 0.8);
+      border-style: solid;
+      transition: all 0.5s ease;
+    }
+    .tl { top: 20px; left: 20px; border-width: 3px 0 0 3px; }
+    .tr { top: 20px; right: 20px; border-width: 3px 3px 0 0; }
+    .bl { bottom: 20px; left: 20px; border-width: 0 0 3px 3px; }
+    .br { bottom: 20px; right: 20px; border-width: 0 3px 3px 0; }
+
+    /* Malla Facial (Simulada con SVG) */
+    .face-mesh-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 280px;
+      height: 350px;
+      opacity: 0.6;
+      transition: transform 0.2s;
+    }
+
+    .mesh-svg {
+      width: 100%;
+      height: 100%;
+      fill: none;
+      stroke: rgba(0, 255, 255, 0.4);
+      stroke-width: 1;
+    }
+
+    /* Textos parpadeantes */
+    .blink { animation: blinker 1s linear infinite; }
+    @keyframes blinker { 50% { opacity: 0; } }
+
+    /* Consola de Datos */
+    .console-log {
+      position: absolute;
+      bottom: 80px;
+      left: 20px;
+      font-size: 12px;
+      line-height: 14px;
+      color: rgba(0, 255, 255, 0.7);
+      text-shadow: 0 0 5px #0ff;
+      height: 100px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column-reverse;
+    }
+
+    /* Botón Principal */
+    #actionBtn {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      pointer-events: auto;
+      background: rgba(0, 20, 20, 0.9);
+      border: 2px solid #0ff;
+      color: #0ff;
+      padding: 15px 40px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 18px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+      transition: all 0.3s;
+      cursor: pointer;
+    }
+    #actionBtn:active {
+      background: #0ff;
+      color: #000;
+    }
+
+    /* Modal de Resultado */
+    .result-modal {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.95);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 1s;
+    }
+    .result-modal.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Gráfico de Barras animado en resultado */
+    .bar-container {
+      width: 80%;
+      height: 20px;
+      background: #333;
+      margin: 10px 0;
+      position: relative;
+    }
+    .bar-fill {
+      height: 100%;
+      background: red;
+      width: 0%;
+      transition: width 2s ease-out;
+      box-shadow: 0 0 15px red;
+    }
+  </style>
+</head>
+<body>
+  <video id="videoElement" autoplay playsinline muted></video>
+
+  <div class="overlay-layer">
+    <div id="scanLine" class="scan-line"></div>
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div id="faceMesh" class="face-mesh-container">
+      <svg class="mesh-svg" viewBox="0 0 280 350" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="140" cy="120" rx="70" ry="85" />
+        <circle cx="110" cy="100" r="8" />
+        <circle cx="170" cy="100" r="8" />
+        <path d="M 100 160 Q 140 200 180 160" />
+      </svg>
+    </div>
+
+    <div style="position:absolute; top:20px; left:20px;">
+      <span>CAM_01: ACTIVE</span><br>
+      <span>RES: 1080p_HDR</span>
+    </div>
+    <div style="position:absolute; top:20px; right:80px;" class="blink">● REC</div>
+
+    <div id="consoleLog" class="console-log">
+      <div>> SYSTEM READY</div>
+      <div>> WAITING FOR INPUT...</div>
+    </div>
+
+    <div style="position:absolute; bottom:80px; right:20px; font-size:11px;">
+      <div>PITCH: <span id="valPitch">120</span> Hz</div>
+      <div>STRESS: <span id="valStress">LOW</span></div>
+      <div>CONF: <span id="valConf">--</span> %</div>
+    </div>
+
+    <button id="actionBtn" onclick="startAnalysis()">INICIAR ESCANEO</button>
+  </div>
+
+  <div id="resultModal" class="result-modal">
+    <h2>ALERTA</h2>
+    <p>ANÁLISIS COMPLETADO</p>
+    <div class="bar-container"><div class="bar-fill" id="barVocal" style="width:0%"></div></div>
+    <span>CONVICCIÓN VOCAL 32%</span>
+    <div class="bar-container"><div class="bar-fill" id="barFacial" style="width:0%"></div></div>
+    <span>COHERENCIA FACIAL 41%</span>
+    <p><strong>Diagnóstico IA</strong></p>
+    <p>ALTA INSEGURIDAD DETECTADA</p>
+    <button id="resetBtn" onclick="resetDemo()" style="margin-top:20px; padding:10px 25px; background:#0ff; color:#000; border:none; cursor:pointer; font-family: 'Share Tech Mono', monospace;">REINICIAR DEMO</button>
+  </div>
+
+  <script>
+    // --- 1. CONFIGURACIÓN DE CÁMARA ---
+    const video = document.getElementById('videoElement');
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        video.srcObject = stream;
+      } catch (err) {
+        console.error("Error acceso cámara:", err);
+        document.getElementById('consoleLog').innerHTML += ` > ERROR: CÁMARA NO DETECTADA `;
+        video.style.backgroundColor = "#111";
+      }
+    }
+
+    startCamera();
+
+    // --- 2. LÓGICA DE SIMULACIÓN ---
+    setInterval(() => {
+      document.getElementById('valPitch').innerText = Math.floor(Math.random() * (160 - 100) + 100);
+      const stressLevels = ["LOW", "MED", "HIGH"];
+      document.getElementById('valStress').innerText = stressLevels[Math.floor(Math.random() * stressLevels.length)];
+    }, 500);
+
+    const fakeLogs = [
+      "INITIALIZING BIO-SENSORS...",
+      "AUDIO INPUT: DETECTED",
+      "CALIBRATING FACE MESH...",
+      "LOCKING TARGET...",
+      "MICRO-TREMOR DETECTED (t=0.4s)",
+      "PUPIL DILATION: IRREGULAR",
+      "VOICE FREQUENCY: UNSTABLE",
+      "CONFIDENCE INTERVAL: DROPPING",
+      "CORRELATING DATA WITH CLOUD...",
+      "GENERATING FINAL REPORT..."
+    ];
+
+    function startAnalysis() {
+      const btn = document.getElementById('actionBtn');
+      const scanLine = document.getElementById('scanLine');
+      const consoleDiv = document.getElementById('consoleLog');
+      const faceMesh = document.getElementById('faceMesh');
+
+      btn.style.display = 'none';
+      scanLine.style.display = 'block';
+
+      faceMesh.style.transform = "translate(-50%, -50%) scale(1.1)";
+      setInterval(() => {
+        faceMesh.style.transform = faceMesh.style.transform === "translate(-50%, -50%) scale(1.1)"
+          ? "translate(-50%, -50%) scale(1.0)"
+          : "translate(-50%, -50%) scale(1.1)";
+      }, 800);
+
+      let delay = 0;
+      fakeLogs.forEach((log, index) => {
+        delay += (index < 3) ? 500 : 250;
+        setTimeout(() => {
+          const entry = document.createElement('div');
+          entry.innerText = `> ${log}`;
+          if(log.includes("UNSTABLE") || log.includes("DROPPING")) entry.style.color = "#ff3333";
+          consoleDiv.prepend(entry);
+        }, delay);
+      });
+
+      setTimeout(() => {
+        showResult();
+      }, delay + 1000);
+    }
+
+    function showResult() {
+      const modal = document.getElementById('resultModal');
+      const barVocal = document.getElementById('barVocal');
+      const barFacial = document.getElementById('barFacial');
+      barVocal.style.width = '0%';
+      barFacial.style.width = '0%';
+      modal.classList.add('active');
+      requestAnimationFrame(() => {
+        barVocal.style.width = '32%';
+        barFacial.style.width = '41%';
+      });
+    }
+
+    function resetDemo() {
+      document.getElementById('resultModal').classList.remove('active');
+      document.getElementById('barVocal').style.width = '0%';
+      document.getElementById('barFacial').style.width = '0%';
+      document.getElementById('actionBtn').style.display = 'block';
+      document.getElementById('scanLine').style.display = 'none';
+      document.getElementById('consoleLog').innerHTML = '<div>> SYSTEM READY</div><div>> WAITING FOR INPUT...</div>';
+      document.getElementById('faceMesh').style.transform = 'translate(-50%, -50%)';
+    }
+  </script>
+</body>
+</html>
