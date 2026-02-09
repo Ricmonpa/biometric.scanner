@@ -72,7 +72,20 @@
     .bl { bottom: 20px; left: 20px; border-width: 0 0 3px 3px; }
     .br { bottom: 20px; right: 20px; border-width: 0 3px 3px 0; }
 
-    /* Malla Facial (Simulada con SVG) */
+    /* Canvas para malla facial en tiempo real */
+    #faceMeshCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 5;
+      pointer-events: none;
+      transform: scaleX(-1); /* Igual que el video, para alinear */
+      object-fit: cover;
+    }
+
+    /* Contenedor SVG estático (fallback / oculto cuando hay malla real) */
     .face-mesh-container {
       position: absolute;
       top: 50%;
@@ -82,6 +95,7 @@
       height: 350px;
       opacity: 0.6;
       transition: transform 0.2s;
+      display: none; /* Oculto: usamos canvas con IA */
     }
 
     .mesh-svg {
@@ -175,6 +189,8 @@
 <body>
   <video id="videoElement" autoplay playsinline muted></video>
 
+  <canvas id="faceMeshCanvas" aria-hidden="true"></canvas>
+
   <div class="overlay-layer">
     <div id="scanLine" class="scan-line"></div>
     <div class="corner tl"></div>
@@ -223,9 +239,12 @@
     <button id="resetBtn" onclick="resetDemo()" style="margin-top:20px; padding:10px 25px; background:#0ff; color:#000; border:none; cursor:pointer; font-family: 'Share Tech Mono', monospace;">REINICIAR DEMO</button>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <script>
     // --- 1. CONFIGURACIÓN DE CÁMARA ---
     const video = document.getElementById('videoElement');
+    const faceMeshCanvas = document.getElementById('faceMeshCanvas');
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
 
     async function startCamera() {
       try {
@@ -238,7 +257,74 @@
       }
     }
 
-    startCamera();
+    // --- MALLA FACIAL EN TIEMPO REAL (face-api.js) ---
+    let faceMeshReady = false;
+
+    async function initFaceMesh() {
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.loadFaceLandmarkModel(MODEL_URL)
+        ]);
+        faceMeshReady = true;
+      } catch (err) {
+        console.warn('Face mesh no disponible:', err);
+      }
+    }
+
+    function drawFaceMeshCyan(ctx, results) {
+      if (!results || results.length === 0) return;
+      results.forEach((detection) => {
+        const positions = detection.landmarks.positions;
+        for (let i = 0; i < positions.length; i++) {
+          const x = positions[i].x;
+          const y = positions[i].y;
+          ctx.shadowColor = '#0ff';
+          ctx.shadowBlur = 6;
+          ctx.beginPath();
+          ctx.arc(x, y, 2, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(0, 255, 255, 0.9)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+      });
+    }
+
+    async function detectFaceMesh() {
+      if (!faceMeshReady || video.readyState < 2) {
+        requestAnimationFrame(detectFaceMesh);
+        return;
+      }
+      const ctx = faceMeshCanvas.getContext('2d');
+      if (!ctx) {
+        requestAnimationFrame(detectFaceMesh);
+        return;
+      }
+      faceMeshCanvas.width = video.videoWidth;
+      faceMeshCanvas.height = video.videoHeight;
+      const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+      const results = await faceapi.detectAllFaces(video, options).withFaceLandmarks();
+      ctx.clearRect(0, 0, faceMeshCanvas.width, faceMeshCanvas.height);
+      if (results.length > 0) {
+        drawFaceMeshCyan(ctx, results);
+      }
+      requestAnimationFrame(detectFaceMesh);
+    }
+
+    (async function init() {
+      await startCamera();
+      video.addEventListener('loadedmetadata', async () => {
+        await initFaceMesh();
+        detectFaceMesh();
+      });
+      if (video.readyState >= 2) {
+        await initFaceMesh();
+        detectFaceMesh();
+      }
+    })();
 
     // --- 2. LÓGICA DE SIMULACIÓN ---
     setInterval(() => {
