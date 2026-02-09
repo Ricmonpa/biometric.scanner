@@ -277,6 +277,19 @@
         console.error('face-api.js no está definido. ¿Bloqueador de anuncios o fallo de red?');
         return;
       }
+      // En Chrome/Android el canvas con frame de getUserMedia a veces no va bien con WebGL.
+      // Forzar CPU en esos navegadores suele hacer que la detección funcione (como en Safari/iPhone).
+      const isChromeOrAndroid = /Chrome|Android/i.test(navigator.userAgent) && !/Safari|iPhone|iPad/.test(navigator.userAgent);
+      const tfRef = typeof tf !== 'undefined' ? tf : (typeof faceapi !== 'undefined' && faceapi.tf ? faceapi.tf : null);
+      if (isChromeOrAndroid && tfRef) {
+        try {
+          await tfRef.setBackend('cpu');
+          await tfRef.ready();
+          console.log('🔧 Backend TensorFlow: CPU (Chrome/Android)');
+        } catch (e) {
+          console.warn('Backend CPU no disponible:', e);
+        }
+      }
       logToConsole('FACE MESH: cargando modelos...', false);
       try {
         await Promise.all([
