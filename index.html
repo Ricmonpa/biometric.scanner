@@ -245,7 +245,8 @@
     // --- 1. CONFIGURACIÓN DE CÁMARA ---
     const video = document.getElementById('videoElement');
     const faceMeshCanvas = document.getElementById('faceMeshCanvas');
-    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+    // Modelos desde el mismo origen (evita CORS en Vercel)
+    const MODEL_URL = './weights';
 
     async function startCamera() {
       try {
