@@ -29,7 +29,7 @@
       filter: contrast(1.2) saturate(0) sepia(100%) hue-rotate(130deg) brightness(0.8); /* Look azulado sci-fi */
     }
 
-    /* Capas de interfaz */
+    /* Capas de interfaz (debajo del canvas de malla para que los puntos se vean) */
     .overlay-layer {
       position: absolute;
       top: 0;
@@ -38,6 +38,23 @@
       height: 100%;
       z-index: 10;
       pointer-events: none; /* Dejar pasar clics */
+    }
+    /* Wrapper del botón por encima del canvas de malla para que siga clickeable */
+    .action-btn-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 25;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 2rem;
+    }
+    .action-btn-wrapper #actionBtn {
+      pointer-events: auto;
     }
 
     /* Animación de Escaneo (Barra Verde) */
@@ -73,16 +90,17 @@
     .bl { bottom: 20px; left: 20px; border-width: 0 0 3px 3px; }
     .br { bottom: 20px; right: 20px; border-width: 0 3px 3px 0; }
 
-    /* Canvas para malla facial en tiempo real */
+    /* Canvas para malla facial en tiempo real (capa propia para que se vea en Chrome/Android) */
     #faceMeshCanvas {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: 5;
+      z-index: 15;
       pointer-events: none;
-      transform: scaleX(-1); /* Igual que el video, para alinear */
+      transform: scaleX(-1) translateZ(0); /* Espejo + capa GPU */
+      backface-visibility: hidden;
       object-fit: cover;
     }
 
@@ -225,7 +243,9 @@
       <div>CONF: <span id="valConf">--</span> %</div>
     </div>
 
-    <button id="actionBtn" onclick="startAnalysis()">INICIAR ESCANEO</button>
+    <div class="action-btn-wrapper">
+      <button id="actionBtn" onclick="startAnalysis()">INICIAR ESCANEO</button>
+    </div>
   </div>
 
   <div id="resultModal" class="result-modal">
@@ -371,7 +391,7 @@
         offscreenCanvas.width = w;
         offscreenCanvas.height = h;
       }
-      const offCtx = offscreenCanvas.getContext('2d');
+      const offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
       offCtx.drawImage(video, 0, 0, w, h);
 
       const results = await faceapi.detectAllFaces(offscreenCanvas, faceDetectorOptions).withFaceLandmarks();
