@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Biometric Analysis System</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔬</text></svg>">
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <style>
     body {
@@ -260,15 +261,32 @@
     // --- MALLA FACIAL EN TIEMPO REAL (face-api.js) ---
     let faceMeshReady = false;
 
+    function logToConsole(msg, isError) {
+      const el = document.getElementById('consoleLog');
+      if (!el) return;
+      const div = document.createElement('div');
+      div.innerText = '> ' + msg;
+      if (isError) div.style.color = '#ff3333';
+      el.prepend(div);
+    }
+
     async function initFaceMesh() {
+      if (typeof faceapi === 'undefined') {
+        logToConsole('FACE MESH: script no cargó (bloqueador o red)', true);
+        console.error('face-api.js no está definido. ¿Bloqueador de anuncios o fallo de red?');
+        return;
+      }
+      logToConsole('FACE MESH: cargando modelos...', false);
       try {
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.loadFaceLandmarkModel(MODEL_URL)
         ]);
         faceMeshReady = true;
+        logToConsole('FACE MESH: listo', false);
       } catch (err) {
-        console.warn('Face mesh no disponible:', err);
+        logToConsole('FACE MESH: error (abre F12 → Console)', true);
+        console.error('Face mesh error:', err);
       }
     }
 
