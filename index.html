@@ -53,8 +53,20 @@
       justify-content: center;
       padding-bottom: 2rem;
     }
-    .action-btn-wrapper #actionBtn {
+    .action-btn-wrapper #actionBtn,
+    .action-btn-wrapper .btn-results {
       pointer-events: auto;
+    }
+    .action-btn-wrapper #btnVerResultados {
+      background: rgba(0, 20, 20, 0.9);
+      border: 2px solid #0ff;
+      color: #0ff;
+      font-family: 'Share Tech Mono', monospace;
+      padding: 15px 28px;
+      box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+    }
+    .action-btn-wrapper #btnVerResultados:hover {
+      background: rgba(0, 255, 255, 0.15);
     }
 
     /* Animación de Escaneo (Barra Verde) */
@@ -222,15 +234,106 @@
     }
     #debugOverlay .warn { color: #fa0; }
     #debugOverlay .err { color: #f44; }
+
+    /* --- Pantallas de resultados SÍ/NO/Empate --- */
+    .result-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.95);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .result-container {
+      text-align: center;
+      padding: 60px;
+      border-radius: 20px;
+      max-width: 600px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .result-container.positive {
+      background: linear-gradient(135deg, #00c853 0%, #64dd17 100%);
+      color: white;
+    }
+    .result-container.negative {
+      background: linear-gradient(135deg, #d32f2f 0%, #f44336 100%);
+      color: white;
+    }
+    .result-container.neutral {
+      background: linear-gradient(135deg, #ffa726 0%, #ffb74d 100%);
+      color: white;
+    }
+    .result-container h1 {
+      font-size: clamp(1.8em, 5vw, 3em);
+      margin-bottom: 30px;
+      font-weight: bold;
+    }
+    .percentage-display {
+      margin: 40px 0;
+    }
+    .big-number {
+      font-size: clamp(4em, 12vw, 8em);
+      font-weight: bold;
+      line-height: 1;
+    }
+    .label {
+      font-size: clamp(1.1em, 3vw, 1.5em);
+      margin-top: 10px;
+      opacity: 0.9;
+    }
+    .stats-breakdown {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 40px;
+      gap: 20px;
+    }
+    .stat-item {
+      font-size: clamp(1.2em, 3vw, 1.8em);
+    }
+    .stat-item .icon {
+      display: block;
+      font-size: 2em;
+      margin-bottom: 10px;
+    }
+    .btn-results {
+      margin-top: 30px;
+      padding: 12px 28px;
+      background: rgba(255,255,255,0.25);
+      border: 2px solid rgba(255,255,255,0.8);
+      color: white;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 1rem;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+    .btn-results:hover {
+      background: rgba(255,255,255,0.4);
+    }
+    /* Indicador en vivo SÍ/NO */
+    #live-response {
+      position: absolute;
+      top: 120px;
+      left: 10px;
+      font-size: 24px;
+      font-weight: bold;
+      color: white;
+      text-shadow: 2px 2px 4px black;
+      z-index: 20;
+      transition: color 0.2s;
+    }
   </style>
 </head>
 <body>
-  <div id="debugOverlay" aria-live="polite">DEBUG: iniciando…</div>
-  <video id="videoElement" autoplay playsinline muted></video>
-
-  <canvas id="faceMeshCanvas" aria-hidden="true"></canvas>
-
-  <div class="overlay-layer">
+  <div class="camera-container">
+    <div id="debugOverlay" aria-live="polite">DEBUG: iniciando…</div>
+    <video id="videoElement" autoplay playsinline muted></video>
+    <canvas id="faceMeshCanvas" aria-hidden="true"></canvas>
+    <div class="overlay-layer">
     <div id="scanLine" class="scan-line"></div>
     <div class="corner tl"></div>
     <div class="corner tr"></div>
@@ -246,6 +349,7 @@
       </svg>
     </div>
 
+    <div id="live-response" aria-live="polite"></div>
     <div style="position:absolute; top:20px; left:20px;">
       <span>CAM_01: ACTIVE</span><br>
       <span>RES: 1080p_HDR</span>
@@ -265,6 +369,70 @@
 
     <div class="action-btn-wrapper">
       <button id="actionBtn" onclick="startAnalysis()">INICIAR ESCANEO</button>
+      <button id="btnVerResultados" class="btn-results" onclick="showResults()" style="display:none; margin-left:16px;">Ver Resultados</button>
+    </div>
+  </div>
+  </div>
+
+  <!-- Pantallas de resultados SÍ/NO/Empate -->
+  <div id="result-yes" class="result-screen">
+    <div class="result-container positive">
+      <h1>✅ La Audiencia Dice SÍ</h1>
+      <div class="percentage-display">
+        <div class="big-number">78%</div>
+        <div class="label">Respuestas Positivas</div>
+      </div>
+      <div class="stats-breakdown">
+        <div class="stat-item yes">
+          <span class="icon">👍</span>
+          <span class="count">156 SÍ</span>
+        </div>
+        <div class="stat-item no">
+          <span class="icon">👎</span>
+          <span class="count">44 NO</span>
+        </div>
+      </div>
+      <button class="btn-results" onclick="hideResultScreens()">Cerrar</button>
+    </div>
+  </div>
+  <div id="result-no" class="result-screen">
+    <div class="result-container negative">
+      <h1>❌ La Audiencia Dice NO</h1>
+      <div class="percentage-display">
+        <div class="big-number">65%</div>
+        <div class="label">Respuestas Negativas</div>
+      </div>
+      <div class="stats-breakdown">
+        <div class="stat-item yes">
+          <span class="icon">👍</span>
+          <span class="count">70 SÍ</span>
+        </div>
+        <div class="stat-item no">
+          <span class="icon">👎</span>
+          <span class="count">130 NO</span>
+        </div>
+      </div>
+      <button class="btn-results" onclick="hideResultScreens()">Cerrar</button>
+    </div>
+  </div>
+  <div id="result-tie" class="result-screen">
+    <div class="result-container neutral">
+      <h1>⚖️ Empate Técnico</h1>
+      <div class="percentage-display">
+        <div class="big-number">50/50</div>
+        <div class="label">Opiniones Divididas</div>
+      </div>
+      <div class="stats-breakdown">
+        <div class="stat-item yes">
+          <span class="icon">👍</span>
+          <span class="count">100 SÍ</span>
+        </div>
+        <div class="stat-item no">
+          <span class="icon">👎</span>
+          <span class="count">100 NO</span>
+        </div>
+      </div>
+      <button class="btn-results" onclick="hideResultScreens()">Cerrar</button>
     </div>
   </div>
 
@@ -301,6 +469,10 @@
 
     // --- MALLA FACIAL EN TIEMPO REAL (face-api.js) ---
     let faceMeshReady = false;
+    let previousLandmarksPx = null;
+    let responseCounts = { yes: 0, no: 0, neutral: 0 };
+    let responseAccumulateFrames = 0;
+    const RESPONSE_ACCUMULATE_EVERY = 10;
 
     function logToConsole(msg, isError) {
       const el = document.getElementById('consoleLog');
@@ -342,6 +514,78 @@
         logToConsole('FACE MESH: error (abre F12 → Console)', true);
         console.error('Face mesh error:', err);
       }
+    }
+
+    // Convierte landmarks de una detección a coordenadas en píxeles (para análisis SÍ/NO)
+    function getLandmarksInPixels(detection, w, h) {
+      const positions = detection.landmarks.positions;
+      const box = detection.detection?.box;
+      const boxX = (box && typeof box.x === 'number') ? box.x : 0;
+      const boxY = (box && typeof box.y === 'number') ? box.y : 0;
+      const boxW = (box && typeof box.width === 'number') ? box.width : w;
+      const boxH = (box && typeof box.height === 'number') ? box.height : h;
+      const first = positions[0];
+      const normalized = first && first.x <= 1 && first.y <= 1;
+      const likelyBoxRelative = first && box && first.x >= 0 && first.x <= boxW && first.y >= 0 && first.y <= boxH;
+      const out = [];
+      for (let i = 0; i < positions.length; i++) {
+        let x = positions[i].x;
+        let y = positions[i].y;
+        if (normalized) {
+          x *= w;
+          y *= h;
+        } else if (likelyBoxRelative) {
+          x += boxX;
+          y += boxY;
+        }
+        out.push({ x, y });
+      }
+      return out;
+    }
+
+    function analyzeFacialResponse(landmarks, previousLandmarks) {
+      let yesScore = 0;
+      let noScore = 0;
+      if (!landmarks || landmarks.length < 58) return 'NEUTRAL';
+
+      const mouthLeft = landmarks[48];
+      const mouthRight = landmarks[54];
+      const noseTip = landmarks[30];
+      if (mouthLeft && mouthRight && noseTip && mouthLeft.y < noseTip.y && mouthRight.y < noseTip.y) {
+        yesScore += 2;
+      }
+
+      const leftEyebrow = landmarks[19];
+      const rightEyebrow = landmarks[24];
+      const leftEye = landmarks[37];
+      if (leftEyebrow && leftEye) {
+        const eyebrowDistance = leftEye.y - leftEyebrow.y;
+        if (eyebrowDistance > 15) yesScore += 1;
+      }
+      if (rightEyebrow && landmarks[42]) {
+        const eyebrowDistanceR = landmarks[42].y - rightEyebrow.y;
+        if (eyebrowDistanceR > 15) yesScore += 1;
+      }
+
+      if (previousLandmarks && previousLandmarks.length >= 31) {
+        const currentNose = landmarks[30];
+        const prevNose = previousLandmarks[30];
+        const verticalMove = Math.abs(currentNose.y - prevNose.y);
+        if (verticalMove > 5) yesScore += 1;
+        const horizontalMove = Math.abs(currentNose.x - prevNose.x);
+        if (horizontalMove > 8) noScore += 1;
+      }
+
+      const mouthTop = landmarks[51];
+      const mouthBottom = landmarks[57];
+      if (mouthTop && mouthBottom) {
+        const mouthHeight = mouthBottom.y - mouthTop.y;
+        if (mouthHeight < 5) noScore += 1;
+      }
+
+      if (yesScore > noScore) return 'YES';
+      if (noScore > yesScore) return 'NO';
+      return 'NEUTRAL';
     }
 
     // Throttle para logs temporales (no saturar consola)
@@ -430,7 +674,7 @@
       scoreThreshold: 0.2
     });
 
-    // Canvas auxiliar: video + malla se dibujan aquí y se copia al visible.
+    // Canvas auxiliar: SOLO para detección (face-api lee de aquí). Video + malla se dibujan en el canvas VISIBLE (arregla Chrome/Android).
     let offscreenCanvas = null;
     let debugThrottle = 0;
     const debugEl = () => document.getElementById('debugOverlay');
@@ -461,10 +705,39 @@
       const results = await faceapi.detectAllFaces(offscreenCanvas, faceDetectorOptions).withFaceLandmarks();
 
       if (results.length > 0) {
-        // Prueba de tubería: cuadrado rojo en el centro. Si lo ves, el canvas y drawImage funcionan.
-        offCtx.fillStyle = 'rgba(255, 0, 0, 0.85)';
-        offCtx.fillRect(Math.floor(w / 2) - 40, Math.floor(h / 2) - 40, 80, 80);
-        drawFaceMeshCyan(offCtx, results, w, h);
+        ctx.drawImage(video, 0, 0, w, h);
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.85)';
+        ctx.fillRect(Math.floor(w / 2) - 40, Math.floor(h / 2) - 40, 80, 80);
+        drawFaceMeshCyan(ctx, results, w, h);
+
+        const d = results[0];
+        const landmarksPx = getLandmarksInPixels(d, w, h);
+        const response = analyzeFacialResponse(landmarksPx, previousLandmarksPx);
+        responseAccumulateFrames++;
+        if (responseAccumulateFrames >= RESPONSE_ACCUMULATE_EVERY) {
+          responseAccumulateFrames = 0;
+          if (response === 'YES') responseCounts.yes++;
+          if (response === 'NO') responseCounts.no++;
+          if (response === 'NEUTRAL') responseCounts.neutral++;
+        }
+        previousLandmarksPx = landmarksPx;
+
+        const liveEl = document.getElementById('live-response');
+        if (liveEl) {
+          if (response === 'YES') {
+            liveEl.textContent = '👍 Detectando SÍ';
+            liveEl.style.color = '#00ff00';
+          } else if (response === 'NO') {
+            liveEl.textContent = '👎 Detectando NO';
+            liveEl.style.color = '#ff0000';
+          } else {
+            liveEl.textContent = '😐 Neutral';
+            liveEl.style.color = '#ffaa00';
+          }
+        }
+        const btnResults = document.getElementById('btnVerResultados');
+        if (btnResults) btnResults.style.display = 'block';
+
         if (debugThrottle++ % 30 === 0 && debugEl()) {
           const d = results[0];
           const pos = d.landmarks.positions;
@@ -480,12 +753,16 @@
             (first && box && first.x >= 0 && first.x <= box.width && first.y >= 0 && first.y <= box.height ? '<br><span class="warn">usando offset box</span>' : '');
         }
       } else {
+        ctx.drawImage(video, 0, 0, w, h);
+        previousLandmarksPx = null;
+        const liveEl = document.getElementById('live-response');
+        if (liveEl) {
+          liveEl.textContent = '';
+        }
         if (debugThrottle++ % 30 === 0 && debugEl()) {
           debugEl().innerHTML = `CANVAS: ${w}×${h}<br>CARAS: 0<br><span class="err">Sin cara detectada</span>`;
         }
       }
-
-      ctx.drawImage(offscreenCanvas, 0, 0, w, h);
 
       requestAnimationFrame(detectFaceMesh);
     }
@@ -581,6 +858,47 @@
       document.getElementById('scanLine').style.display = 'none';
       document.getElementById('consoleLog').innerHTML = '<div>> SYSTEM READY</div><div>> WAITING FOR INPUT...</div>';
       document.getElementById('faceMesh').style.transform = 'translate(-50%, -50%)';
+    }
+
+    function showResults() {
+      const total = responseCounts.yes + responseCounts.no;
+      const cameraContainer = document.querySelector('.camera-container');
+      if (!cameraContainer) return;
+      document.getElementById('result-yes').style.display = 'none';
+      document.getElementById('result-no').style.display = 'none';
+      document.getElementById('result-tie').style.display = 'none';
+
+      if (total === 0) {
+        document.getElementById('live-response').textContent = 'Sin datos aún';
+        return;
+      }
+      cameraContainer.style.display = 'none';
+      const yesPercent = (responseCounts.yes / total) * 100;
+      const noPercent = (responseCounts.no / total) * 100;
+
+      if (Math.abs(yesPercent - noPercent) < 5) {
+        document.getElementById('result-tie').style.display = 'flex';
+        document.querySelector('#result-tie .stat-item.yes .count').textContent = responseCounts.yes + ' SÍ';
+        document.querySelector('#result-tie .stat-item.no .count').textContent = responseCounts.no + ' NO';
+      } else if (yesPercent > noPercent) {
+        document.getElementById('result-yes').style.display = 'flex';
+        document.querySelector('#result-yes .big-number').textContent = Math.round(yesPercent) + '%';
+        document.querySelector('#result-yes .stat-item.yes .count').textContent = responseCounts.yes + ' SÍ';
+        document.querySelector('#result-yes .stat-item.no .count').textContent = responseCounts.no + ' NO';
+      } else {
+        document.getElementById('result-no').style.display = 'flex';
+        document.querySelector('#result-no .big-number').textContent = Math.round(noPercent) + '%';
+        document.querySelector('#result-no .stat-item.yes .count').textContent = responseCounts.yes + ' SÍ';
+        document.querySelector('#result-no .stat-item.no .count').textContent = responseCounts.no + ' NO';
+      }
+    }
+
+    function hideResultScreens() {
+      document.getElementById('result-yes').style.display = 'none';
+      document.getElementById('result-no').style.display = 'none';
+      document.getElementById('result-tie').style.display = 'none';
+      const cameraContainer = document.querySelector('.camera-container');
+      if (cameraContainer) cameraContainer.style.display = '';
     }
   </script>
 </body>
