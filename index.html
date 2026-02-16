@@ -93,7 +93,7 @@
     .bl { bottom: 20px; left: 20px; border-width: 0 0 3px 3px; }
     .br { bottom: 20px; right: 20px; border-width: 0 3px 3px 0; }
 
-    /* Wrapper con espejo: en Chrome el canvas con transform no pintaba; el espejo va en el wrapper. */
+    /* Wrapper: espejo. Sin filter aquí para que los puntos cyan se vean. Video se oculta en JS (Chrome lo pintaba encima). */
     .face-mesh-canvas-wrapper {
       position: absolute;
       top: 0;
@@ -990,6 +990,8 @@
         requestAnimationFrame(detectFaceMesh);
         return;
       }
+      // Chrome pinta <video> en capa aparte y tapa el canvas: ocultar video y mostrar solo canvas (frame + puntos)
+      if (video.style.visibility !== 'hidden') video.style.visibility = 'hidden';
       faceMeshCanvas.width = w;
       faceMeshCanvas.height = h;
 
