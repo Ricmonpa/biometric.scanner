@@ -885,7 +885,7 @@
       if (!results || results.length === 0) return;
       const w = width || ctx.canvas.width;
       const h = height || ctx.canvas.height;
-      const radiusCyan = 3;
+      const radiusCyan = 5;
       const fillStyleCyan = 'rgba(0, 255, 255, 0.95)';
       results.forEach((detection) => {
         const positions = detection.landmarks.positions;
@@ -897,34 +897,6 @@
         const first = positions[0];
         const normalized = first && first.x <= 1 && first.y <= 1;
         const likelyBoxRelative = first && box && first.x >= 0 && first.x <= boxW && first.y >= 0 && first.y <= boxH;
-        function toPx(i) {
-          let x = positions[i].x, y = positions[i].y;
-          if (normalized) { x *= w; y *= h; } else if (likelyBoxRelative) { x += boxX; y += boxY; }
-          return { x, y };
-        }
-        // === DEBUG 3: Círculos de prueba GRANDES ===
-        var p30 = toPx(30), p36 = toPx(36), p45 = toPx(45), p8 = toPx(8);
-        ctx.fillStyle = 'red';
-        ctx.beginPath();
-        ctx.arc(p30.x, p30.y, 20, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'lime';
-        ctx.beginPath();
-        ctx.arc(p36.x, p36.y, 20, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'yellow';
-        ctx.beginPath();
-        ctx.arc(p45.x, p45.y, 20, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'cyan';
-        ctx.beginPath();
-        ctx.arc(p8.x, p8.y, 20, 0, Math.PI * 2);
-        ctx.fill();
-        if (drawFaceMeshLogTick++ % 60 === 0) {
-          console.log('🎯 Coordenadas clave:', { nariz: p30, ojoIzq: p36, ojoDer: p45, barbilla: p8, device: /iPhone/.test(navigator.userAgent) ? 'iPhone' : 'Chrome' });
-        }
-        // === FIN DEBUG 3 ===
-        const firstThreeCoords = [];
         for (let i = 0; i < positions.length; i++) {
           let x = positions[i].x;
           let y = positions[i].y;
@@ -935,43 +907,16 @@
             x += boxX;
             y += boxY;
           }
-          if (i < 3) firstThreeCoords.push({ x, y });
-          if (i < 3 && drawFaceMeshLogTick++ % DRAW_MESH_LOG_EVERY === 0) {
-            console.log(`[drawFaceMeshCyan] punto ${i} (x,y)=(${x.toFixed(1)}, ${y.toFixed(1)}) | fillStyle=${fillStyleCyan} radio=${radiusCyan}`);
-          }
           ctx.shadowColor = '#0ff';
-          ctx.shadowBlur = 6;
+          ctx.shadowBlur = 8;
           ctx.beginPath();
           ctx.arc(x, y, radiusCyan, 0, Math.PI * 2);
           ctx.fillStyle = fillStyleCyan;
           ctx.fill();
           ctx.strokeStyle = '#0ff';
-          ctx.lineWidth = 1;
+          ctx.lineWidth = 2;
           ctx.stroke();
           ctx.shadowBlur = 0;
-        }
-        // === TEST 2: Cuadrado y texto JUSTO DESPUÉS de dibujar todos los puntos ===
-        ctx.fillStyle = 'red';
-        ctx.fillRect(100, 100, 100, 100);
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 30px Arial';
-        ctx.fillText('DESPUÉS DE PUNTOS', 120, 250);
-        console.log('🟥 Cuadrado rojo dibujado DESPUÉS de puntos');
-        // === FIN TEST 2 ===
-        if (firstThreeCoords.length >= 3) {
-          ctx.shadowBlur = 0;
-          ctx.fillStyle = 'red';
-          ctx.beginPath();
-          ctx.arc(firstThreeCoords[0].x, firstThreeCoords[0].y, 20, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = 'yellow';
-          ctx.beginPath();
-          ctx.arc(firstThreeCoords[1].x, firstThreeCoords[1].y, 20, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = 'magenta';
-          ctx.beginPath();
-          ctx.arc(firstThreeCoords[2].x, firstThreeCoords[2].y, 20, 0, Math.PI * 2);
-          ctx.fill();
         }
       });
     }
@@ -995,7 +940,7 @@
     // Opciones del detector relajadas para mejor detección
     const faceDetectorOptions = new faceapi.TinyFaceDetectorOptions({
       inputSize: 416,
-      scoreThreshold: 0.2
+      scoreThreshold: 0.1
     });
 
     // Canvas auxiliar: SOLO para detección (face-api lee de aquí). Video + malla se dibujan en el canvas VISIBLE (arregla Chrome/Android).
@@ -1040,15 +985,9 @@
       }
       faceMeshCanvas.width = w;
       faceMeshCanvas.height = h;
+      // NO pintar el video en el canvas: el video queda VISIBLE y el canvas solo lleva los marcadores (fondo transparente). Así face-api siempre lee frames actualizados del video.
+      // NUNCA ocultar el video: en Chrome al ocultarlo a veces deja de dar frames válidos y devuelve CARAS: 0.
 
-      // NUNCA pantalla negra: pintar el video en el canvas INMEDIATAMENTE (antes del await)
-      ctx.drawImage(video, 0, 0, w, h);
-      if (typeof window._faceMeshFirstFrameDrawn === 'undefined') {
-        window._faceMeshFirstFrameDrawn = true;
-        video.style.visibility = 'hidden'; // Ocultar video solo cuando el canvas ya muestra imagen
-      }
-
-      // Detección sobre el VIDEO directamente (evita fallos con canvas auxiliar en Chrome que daban CARAS: 0)
       const results = await faceapi.detectAllFaces(video, faceDetectorOptions).withFaceLandmarks();
 
       // Verificación dimensiones (log temporal cada ~60 frames)
@@ -1063,24 +1002,8 @@
       }
 
       if (results.length > 0) {
-        ctx.drawImage(video, 0, 0, w, h);
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.85)';
-        ctx.fillRect(Math.floor(w / 2) - 40, Math.floor(h / 2) - 40, 80, 80);
         drawFaceMeshCyan(ctx, results, w, h);
 
-        // === DEBUG 1: ¿Se pinta el canvas? ===
-        ctx.fillStyle = 'magenta';
-        ctx.fillRect(10, 10, 50, 50);
-        ctx.fillStyle = 'yellow';
-        ctx.fillRect(faceMeshCanvas.width - 60, 10, 50, 50);
-        ctx.fillStyle = 'cyan';
-        ctx.fillRect(faceMeshCanvas.width / 2 - 25, faceMeshCanvas.height / 2 - 25, 50, 50);
-        ctx.fillStyle = 'white';
-        ctx.font = '20px monospace';
-        ctx.fillText('CANVAS OK', faceMeshCanvas.width / 2 - 60, 30);
-        // === FIN DEBUG 1 ===
-
-        // === DEBUG 2: overlay coordenadas ===
         var debugDiv = document.getElementById('debug-coords');
         if (debugDiv) {
           var fp = results[0].landmarks.positions[0];
@@ -1092,18 +1015,6 @@
             '<strong>Punto 67:</strong> (' + lp.x.toFixed(1) + ', ' + lp.y.toFixed(1) + ')<br>' +
             '<strong>Total puntos:</strong> ' + results[0].landmarks.positions.length;
         }
-
-        // === TEST 4: Dibujar DIRECTO en el canvas visible (centro) ===
-        var visibleCanvas = document.getElementById('faceMeshCanvas');
-        var visibleCtx = visibleCanvas ? visibleCanvas.getContext('2d') : null;
-        if (visibleCtx) {
-          visibleCtx.fillStyle = 'lime';
-          visibleCtx.beginPath();
-          visibleCtx.arc(320, 240, 30, 0, Math.PI * 2);
-          visibleCtx.fill();
-          console.log('🟢 Círculo lime dibujado DIRECTO en canvas visible');
-        }
-        // === FIN TEST 4 ===
 
         const d = results[0];
         const landmarksPx = getLandmarksInPixels(d, w, h);
@@ -1155,7 +1066,6 @@
             (first && box && first.x >= 0 && first.x <= box.width && first.y >= 0 && first.y <= box.height ? '<br><span class="warn">usando offset box</span>' : '');
         }
       } else {
-        ctx.drawImage(video, 0, 0, w, h);
         previousLandmarksPx = null;
         const liveEl = document.getElementById('live-response');
         if (liveEl) {
