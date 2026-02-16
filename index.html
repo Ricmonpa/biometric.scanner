@@ -1048,15 +1048,8 @@
         video.style.visibility = 'hidden'; // Ocultar video solo cuando el canvas ya muestra imagen
       }
 
-      if (!offscreenCanvas || offscreenCanvas.width !== w || offscreenCanvas.height !== h) {
-        offscreenCanvas = document.createElement('canvas');
-        offscreenCanvas.width = w;
-        offscreenCanvas.height = h;
-      }
-      const offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
-      offCtx.drawImage(video, 0, 0, w, h);
-
-      const results = await faceapi.detectAllFaces(offscreenCanvas, faceDetectorOptions).withFaceLandmarks();
+      // Detección sobre el VIDEO directamente (evita fallos con canvas auxiliar en Chrome que daban CARAS: 0)
+      const results = await faceapi.detectAllFaces(video, faceDetectorOptions).withFaceLandmarks();
 
       // Verificación dimensiones (log temporal cada ~60 frames)
       if (dimensionLogThrottle++ % 60 === 0) {
