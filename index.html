@@ -102,10 +102,9 @@
       height: 100%;
       z-index: 15;
       pointer-events: none;
-      transform: scaleX(-1) translateZ(0);
-      backface-visibility: hidden;
+      transform: scaleX(-1);
       object-fit: cover;
-      /* Sin filtro: el video mantiene el efecto en #videoElement; los marcadores se ven en colores normales */
+      /* SIN FILTRO - removido completamente */
     }
 
     /* Contenedor SVG estático (fallback / oculto cuando hay malla real) */
@@ -985,10 +984,16 @@
       }
       faceMeshCanvas.width = w;
       faceMeshCanvas.height = h;
-      // NO pintar el video en el canvas: el video queda VISIBLE y el canvas solo lleva los marcadores (fondo transparente). Así face-api siempre lee frames actualizados del video.
-      // NUNCA ocultar el video: en Chrome al ocultarlo a veces deja de dar frames válidos y devuelve CARAS: 0.
 
-      const results = await faceapi.detectAllFaces(video, faceDetectorOptions).withFaceLandmarks();
+      // Detección desde un canvas con el frame actual (en algunos navegadores detectAllFaces(video) devuelve 0 caras)
+      if (!offscreenCanvas || offscreenCanvas.width !== w || offscreenCanvas.height !== h) {
+        offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = w;
+        offscreenCanvas.height = h;
+      }
+      var offCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+      offCtx.drawImage(video, 0, 0, w, h);
+      var results = await faceapi.detectAllFaces(offscreenCanvas, faceDetectorOptions).withFaceLandmarks();
 
       // Verificación dimensiones (log temporal cada ~60 frames)
       if (dimensionLogThrottle++ % 60 === 0) {
@@ -1001,6 +1006,8 @@
         });
       }
 
+      // Pintar siempre el frame del video en el canvas visible (Chrome/Android no muestran solo puntos en canvas vacío)
+      ctx.drawImage(video, 0, 0, w, h);
       if (results.length > 0) {
         drawFaceMeshCyan(ctx, results, w, h);
 
