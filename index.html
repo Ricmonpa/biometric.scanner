@@ -93,7 +93,7 @@
     .bl { bottom: 20px; left: 20px; border-width: 0 0 3px 3px; }
     .br { bottom: 20px; right: 20px; border-width: 0 3px 3px 0; }
 
-    /* Canvas: muestra video + malla (mismo look que el video para iPhone/Chrome/Android) */
+    /* Canvas: muestra video + malla. Tamaño CSS 100% para llenar contenedor; tamaño interno (canvas.width/height) se sincroniza con el video en JS. */
     #faceMeshCanvas {
       position: absolute;
       top: 0;
@@ -717,6 +717,12 @@
         video.srcObject = stream;
         // === DEBUG 4: eventos de video para diagnosticar pantalla negra ===
         video.addEventListener('loadedmetadata', function() {
+          var canvas = document.getElementById('faceMeshCanvas');
+          if (canvas && video.videoWidth > 0 && video.videoHeight > 0) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            console.log('✅ Canvas redimensionado a:', canvas.width, 'x', canvas.height);
+          }
           console.log('✅ Video ready:', video.videoWidth, 'x', video.videoHeight);
         });
         video.addEventListener('pause', function() {
@@ -728,6 +734,15 @@
         });
         video.addEventListener('stalled', function() {
           console.warn('⚠️ Video stalled!');
+        });
+        // FIX 3: si el video/cámara cambia de resolución (ej. rotar móvil), mantener canvas sincronizado
+        window.addEventListener('resize', function() {
+          var canvas = document.getElementById('faceMeshCanvas');
+          if (canvas && video.videoWidth > 0 && video.videoHeight > 0) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            console.log('📐 Canvas redimensionado (resize):', canvas.width, 'x', canvas.height);
+          }
         });
         // === FIN DEBUG 4 (listeners) ===
       } catch (err) {
@@ -986,6 +1001,7 @@
     // Canvas auxiliar: SOLO para detección (face-api lee de aquí). Video + malla se dibujan en el canvas VISIBLE (arregla Chrome/Android).
     let offscreenCanvas = null;
     let debugThrottle = 0;
+    let dimensionLogThrottle = 0;
     const debugEl = () => document.getElementById('debugOverlay');
 
     /*
@@ -1017,6 +1033,11 @@
       }
       const w = video.videoWidth;
       const h = video.videoHeight;
+      // No dibujar si el video aún no tiene dimensiones válidas (evita canvas 300x150 por defecto)
+      if (!w || !h || w < 100 || h < 100) {
+        requestAnimationFrame(detectFaceMesh);
+        return;
+      }
       faceMeshCanvas.width = w;
       faceMeshCanvas.height = h;
 
@@ -1029,6 +1050,17 @@
       offCtx.drawImage(video, 0, 0, w, h);
 
       const results = await faceapi.detectAllFaces(offscreenCanvas, faceDetectorOptions).withFaceLandmarks();
+
+      // Verificación dimensiones (log temporal cada ~60 frames)
+      if (dimensionLogThrottle++ % 60 === 0) {
+        console.log('🔍 Dimensiones:', {
+          videoW: video.videoWidth,
+          videoH: video.videoHeight,
+          canvasW: faceMeshCanvas.width,
+          canvasH: faceMeshCanvas.height,
+          match: video.videoWidth === faceMeshCanvas.width && video.videoHeight === faceMeshCanvas.height ? '✅' : '❌'
+        });
+      }
 
       if (results.length > 0) {
         ctx.drawImage(video, 0, 0, w, h);
@@ -1147,6 +1179,13 @@
         detectionStarted = true;
         await initFaceMesh();
         await waitForVideoReady(video);
+        // FIX 1: sincronizar tamaño del canvas con el video antes de iniciar el loop
+        var canvas = document.getElementById('faceMeshCanvas');
+        if (canvas && video.videoWidth > 0 && video.videoHeight > 0) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          console.log('✅ Canvas redimensionado a:', canvas.width, 'x', canvas.height);
+        }
         video.style.visibility = 'hidden'; // Solo canvas (video+malla) visible; evita doble capa en Chrome/Android
         console.log('🎬 Iniciando loop de detección...');
         // === DEBUG 4: mantener pantalla activa en móviles ===
