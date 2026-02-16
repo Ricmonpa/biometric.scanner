@@ -469,6 +469,18 @@
 <body>
   <div class="camera-container">
     <div id="debugOverlay" aria-live="polite">DEBUG: iniciando…</div>
+    <div id="debug-coords" style="
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.9);
+      color: lime;
+      padding: 15px;
+      font-family: monospace;
+      font-size: 14px;
+      z-index: 100;
+      border: 2px solid lime;
+    "></div>
     <video id="videoElement" autoplay playsinline muted></video>
     <canvas id="faceMeshCanvas" aria-hidden="true"></canvas>
     <div class="overlay-layer">
@@ -658,6 +670,9 @@
     <button id="resetBtn" onclick="resetDemo()" style="margin-top:20px; padding:10px 25px; background:#0ff; color:#000; border:none; cursor:pointer; font-family: 'Share Tech Mono', monospace;">REINICIAR DEMO</button>
   </div>
 
+  <!-- TEST 5: botón temporal captura canvas -->
+  <button type="button" onclick="captureCanvas()" style="position:fixed; top:10px; right:10px; z-index:9999; padding:10px 16px; background:#333; color:lime; border:2px solid lime; cursor:pointer; font-family:monospace;">Capturar Canvas</button>
+
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <script>
     // --- 1. CONFIGURACIÓN DE CÁMARA ---
@@ -666,10 +681,55 @@
     // Modelos desde el mismo origen (evita CORS en Vercel)
     const MODEL_URL = './weights';
 
+    // === TEST 3: Verificar cuántos canvas hay y sus estilos ===
+    window.addEventListener('load', function() {
+      var allCanvas = document.querySelectorAll('canvas');
+      console.log('📊 Total de canvas en la página:', allCanvas.length);
+      allCanvas.forEach(function(c, i) {
+        console.log('Canvas ' + i + ':', {
+          id: c.id,
+          width: c.width,
+          height: c.height,
+          zIndex: window.getComputedStyle(c).zIndex,
+          visibility: window.getComputedStyle(c).visibility,
+          display: window.getComputedStyle(c).display
+        });
+      });
+    });
+
+    // === TEST 5: Capturar frame del canvas ===
+    function captureCanvas() {
+      var canvas = document.getElementById('faceMeshCanvas');
+      if (!canvas) { console.warn('Canvas no encontrado'); return; }
+      var dataURL = canvas.toDataURL('image/png');
+      var win = window.open();
+      if (win) {
+        win.document.write('<img src="' + dataURL + '"/>');
+        console.log('📸 Canvas capturado. Mira la nueva ventana.');
+      } else {
+        console.log('📸 Data URL (pega en nueva pestaña):', dataURL.substring(0, 80) + '...');
+      }
+    }
+
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         video.srcObject = stream;
+        // === DEBUG 4: eventos de video para diagnosticar pantalla negra ===
+        video.addEventListener('loadedmetadata', function() {
+          console.log('✅ Video ready:', video.videoWidth, 'x', video.videoHeight);
+        });
+        video.addEventListener('pause', function() {
+          console.warn('⚠️ Video pausado!');
+          video.play();
+        });
+        video.addEventListener('suspend', function() {
+          console.warn('⚠️ Video suspendido!');
+        });
+        video.addEventListener('stalled', function() {
+          console.warn('⚠️ Video stalled!');
+        });
+        // === FIN DEBUG 4 (listeners) ===
       } catch (err) {
         console.error("Error acceso cámara:", err);
         document.getElementById('consoleLog').innerHTML += ` > ERROR: CÁMARA NO DETECTADA `;
@@ -682,7 +742,7 @@
     let previousLandmarksPx = null;
     let responseCounts = { yes: 0, no: 0, neutral: 0 };
     let responseAccumulateFrames = 0;
-    const RESPONSE_ACCUMULATE_EVERY = 10;
+    const RESPONSE_ACCUMULATE_EVERY = 45; // ~1 voto por segundo (más lento que 10)
 
     function logToConsole(msg, isError) {
       const el = document.getElementById('consoleLog');
@@ -783,7 +843,7 @@
         const verticalMove = Math.abs(currentNose.y - prevNose.y);
         if (verticalMove > 5) yesScore += 1;
         const horizontalMove = Math.abs(currentNose.x - prevNose.x);
-        if (horizontalMove > 8) noScore += 1;
+        if (horizontalMove > 6) noScore += 2; // peso extra para cabeceo NO
       }
 
       const mouthTop = landmarks[51];
@@ -793,8 +853,12 @@
         if (mouthHeight < 5) noScore += 1;
       }
 
-      if (yesScore > noScore) return 'YES';
+      // Exigir señal clara para SÍ (evitar que todo sea SÍ con cara neutra)
+      if (yesScore > noScore && yesScore >= 2) return 'YES';
       if (noScore > yesScore) return 'NO';
+      // Mezcla en demo: ~20% de los que serían SÍ pasan a NO para variedad
+      if (yesScore > noScore && yesScore >= 1 && Math.random() < 0.2) return 'NO';
+      if (yesScore > noScore) return 'YES';
       return 'NEUTRAL';
     }
 
@@ -818,6 +882,33 @@
         const first = positions[0];
         const normalized = first && first.x <= 1 && first.y <= 1;
         const likelyBoxRelative = first && box && first.x >= 0 && first.x <= boxW && first.y >= 0 && first.y <= boxH;
+        function toPx(i) {
+          let x = positions[i].x, y = positions[i].y;
+          if (normalized) { x *= w; y *= h; } else if (likelyBoxRelative) { x += boxX; y += boxY; }
+          return { x, y };
+        }
+        // === DEBUG 3: Círculos de prueba GRANDES ===
+        var p30 = toPx(30), p36 = toPx(36), p45 = toPx(45), p8 = toPx(8);
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.arc(p30.x, p30.y, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'lime';
+        ctx.beginPath();
+        ctx.arc(p36.x, p36.y, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'yellow';
+        ctx.beginPath();
+        ctx.arc(p45.x, p45.y, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'cyan';
+        ctx.beginPath();
+        ctx.arc(p8.x, p8.y, 20, 0, Math.PI * 2);
+        ctx.fill();
+        if (drawFaceMeshLogTick++ % 60 === 0) {
+          console.log('🎯 Coordenadas clave:', { nariz: p30, ojoIzq: p36, ojoDer: p45, barbilla: p8, device: /iPhone/.test(navigator.userAgent) ? 'iPhone' : 'Chrome' });
+        }
+        // === FIN DEBUG 3 ===
         const firstThreeCoords = [];
         for (let i = 0; i < positions.length; i++) {
           let x = positions[i].x;
@@ -844,6 +935,14 @@
           ctx.stroke();
           ctx.shadowBlur = 0;
         }
+        // === TEST 2: Cuadrado y texto JUSTO DESPUÉS de dibujar todos los puntos ===
+        ctx.fillStyle = 'red';
+        ctx.fillRect(100, 100, 100, 100);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 30px Arial';
+        ctx.fillText('DESPUÉS DE PUNTOS', 120, 250);
+        console.log('🟥 Cuadrado rojo dibujado DESPUÉS de puntos');
+        // === FIN TEST 2 ===
         if (firstThreeCoords.length >= 3) {
           ctx.shadowBlur = 0;
           ctx.fillStyle = 'red';
@@ -889,6 +988,23 @@
     let debugThrottle = 0;
     const debugEl = () => document.getElementById('debugOverlay');
 
+    /*
+     * === TEST 1: ORDEN COMPLETO DEL LOOP DE DETECCIÓN ===
+     * 1. NO hay clearRect explícito.
+     * 2. faceMeshCanvas.width = w; faceMeshCanvas.height = h;  (al inicio) -> ESO BORRA el canvas.
+     * 3. offscreenCanvas: offCtx.drawImage(video, 0, 0, w, h)  (solo en canvas auxiliar, no el visible).
+     * 4. await faceapi.detectAllFaces(offscreenCanvas...)  (async).
+     * 5. Si results.length > 0:
+     *    a) ctx.drawImage(video, 0, 0, w, h)  -> pinta video en canvas VISIBLE (faceMeshCanvas).
+     *    b) ctx.fillRect(centro)  -> cuadrado rojo centro.
+     *    c) drawFaceMeshCyan(ctx, results, w, h)  -> puntos + DEBUG 3 círculos + TEST 2 cuadrado rojo.
+     *    d) DEBUG 1: cuadrados magenta/amarillo/cyan + texto "CANVAS OK".
+     *    e) DEBUG 2: actualiza #debug-coords.
+     *    f) TEST 4: círculo lime centro en canvas visible.
+     * 6. Si results.length === 0: ctx.drawImage(video, 0, 0, w, h) solo.
+     * 7. requestAnimationFrame(detectFaceMesh).
+     * ctx es SIEMPRE faceMeshCanvas.getContext('2d') -> el único canvas visible para la malla.
+     */
     async function detectFaceMesh() {
       if (!faceMeshReady || video.readyState < 2) {
         requestAnimationFrame(detectFaceMesh);
@@ -919,6 +1035,43 @@
         ctx.fillStyle = 'rgba(255, 0, 0, 0.85)';
         ctx.fillRect(Math.floor(w / 2) - 40, Math.floor(h / 2) - 40, 80, 80);
         drawFaceMeshCyan(ctx, results, w, h);
+
+        // === DEBUG 1: ¿Se pinta el canvas? ===
+        ctx.fillStyle = 'magenta';
+        ctx.fillRect(10, 10, 50, 50);
+        ctx.fillStyle = 'yellow';
+        ctx.fillRect(faceMeshCanvas.width - 60, 10, 50, 50);
+        ctx.fillStyle = 'cyan';
+        ctx.fillRect(faceMeshCanvas.width / 2 - 25, faceMeshCanvas.height / 2 - 25, 50, 50);
+        ctx.fillStyle = 'white';
+        ctx.font = '20px monospace';
+        ctx.fillText('CANVAS OK', faceMeshCanvas.width / 2 - 60, 30);
+        // === FIN DEBUG 1 ===
+
+        // === DEBUG 2: overlay coordenadas ===
+        var debugDiv = document.getElementById('debug-coords');
+        if (debugDiv) {
+          var fp = results[0].landmarks.positions[0];
+          var lp = results[0].landmarks.positions[67];
+          debugDiv.innerHTML = '<strong>DEVICE:</strong> ' + (/iPhone|iPad/.test(navigator.userAgent) ? 'iPhone' : 'Chrome') + '<br>' +
+            '<strong>Canvas:</strong> ' + faceMeshCanvas.width + 'x' + faceMeshCanvas.height + '<br>' +
+            '<strong>Video:</strong> ' + video.videoWidth + 'x' + video.videoHeight + '<br>' +
+            '<strong>Punto 0:</strong> (' + fp.x.toFixed(1) + ', ' + fp.y.toFixed(1) + ')<br>' +
+            '<strong>Punto 67:</strong> (' + lp.x.toFixed(1) + ', ' + lp.y.toFixed(1) + ')<br>' +
+            '<strong>Total puntos:</strong> ' + results[0].landmarks.positions.length;
+        }
+
+        // === TEST 4: Dibujar DIRECTO en el canvas visible (centro) ===
+        var visibleCanvas = document.getElementById('faceMeshCanvas');
+        var visibleCtx = visibleCanvas ? visibleCanvas.getContext('2d') : null;
+        if (visibleCtx) {
+          visibleCtx.fillStyle = 'lime';
+          visibleCtx.beginPath();
+          visibleCtx.arc(320, 240, 30, 0, Math.PI * 2);
+          visibleCtx.fill();
+          console.log('🟢 Círculo lime dibujado DIRECTO en canvas visible');
+        }
+        // === FIN TEST 4 ===
 
         const d = results[0];
         const landmarksPx = getLandmarksInPixels(d, w, h);
@@ -976,6 +1129,8 @@
         if (liveEl) {
           liveEl.textContent = '';
         }
+        var debugDivEmpty = document.getElementById('debug-coords');
+        if (debugDivEmpty) debugDivEmpty.innerHTML = '';
         if (debugThrottle++ % 30 === 0 && debugEl()) {
           debugEl().innerHTML = `CANVAS: ${w}×${h}<br>CARAS: 0<br><span class="err">Sin cara detectada</span>`;
         }
@@ -994,6 +1149,12 @@
         await waitForVideoReady(video);
         video.style.visibility = 'hidden'; // Solo canvas (video+malla) visible; evita doble capa en Chrome/Android
         console.log('🎬 Iniciando loop de detección...');
+        // === DEBUG 4: mantener pantalla activa en móviles ===
+        if ('wakeLock' in navigator) {
+          navigator.wakeLock.request('screen').catch(function(err) {
+            console.log('WakeLock no disponible:', err);
+          });
+        }
         detectFaceMesh();
       };
       video.addEventListener('loadedmetadata', startDetection);
