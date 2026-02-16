@@ -1016,8 +1016,15 @@
         });
       }
 
-      // Pintar siempre el frame del video en el canvas visible (Chrome/Android no muestran solo puntos en canvas vacío)
+      // Pintar siempre el frame del video en el canvas visible
       ctx.drawImage(video, 0, 0, w, h);
+      // PRUEBA: si esto NO se ve en Chrome, el canvas no se muestra. Si SÍ se ve, el fallo está en drawFaceMeshCyan.
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+      ctx.fillRect(w / 2 - 60, h / 2 - 40, 120, 80);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 32px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('CANVAS OK', w / 2, h / 2 + 6);
       if (results.length > 0) {
         drawFaceMeshCyan(ctx, results, w, h);
 
