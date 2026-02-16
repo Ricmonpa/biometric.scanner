@@ -1041,6 +1041,13 @@
       faceMeshCanvas.width = w;
       faceMeshCanvas.height = h;
 
+      // NUNCA pantalla negra: pintar el video en el canvas INMEDIATAMENTE (antes del await)
+      ctx.drawImage(video, 0, 0, w, h);
+      if (typeof window._faceMeshFirstFrameDrawn === 'undefined') {
+        window._faceMeshFirstFrameDrawn = true;
+        video.style.visibility = 'hidden'; // Ocultar video solo cuando el canvas ya muestra imagen
+      }
+
       if (!offscreenCanvas || offscreenCanvas.width !== w || offscreenCanvas.height !== h) {
         offscreenCanvas = document.createElement('canvas');
         offscreenCanvas.width = w;
@@ -1186,7 +1193,7 @@
           canvas.height = video.videoHeight;
           console.log('✅ Canvas redimensionado a:', canvas.width, 'x', canvas.height);
         }
-        video.style.visibility = 'hidden'; // Solo canvas (video+malla) visible; evita doble capa en Chrome/Android
+        // NO ocultar el video aquí: se oculta solo cuando el loop haya dibujado el primer frame (evita pantalla negra)
         console.log('🎬 Iniciando loop de detección...');
         // === DEBUG 4: mantener pantalla activa en móviles ===
         if ('wakeLock' in navigator) {
