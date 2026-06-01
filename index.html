@@ -329,7 +329,7 @@
 
       <div class="countdown" id="countdown">3</div>
 
-      <button id="recordBtn" class="record-btn" type="button">▶ GRABAR RESPUESTA</button>
+      <button id="recordBtn" class="record-btn" type="button">▶ OBTENER RESPUESTA</button>
     </aside>
   </div>
 
@@ -509,7 +509,7 @@
       recDot.classList.remove('active');
       recordBtn.classList.remove('recording');
       recordBtn.disabled = false;
-      recordBtn.textContent = '▶ GRABAR RESPUESTA';
+      recordBtn.textContent = '▶ OBTENER RESPUESTA';
 
       // Analiza toda la trayectoria de 3s
       const { verdict: final } = classifyPts(recordTrail);
